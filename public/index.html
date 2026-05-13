@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webhook Manager | Shopify to Reply.cx</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="32" height="32" rx="8" fill="url(#grad1)"/>
+                    <path d="M10 16L14 20L22 12" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                    <defs>
+                        <linearGradient id="grad1" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#4F46E5"/>
+                            <stop offset="1" stop-color="#9333EA"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <h1>Webhook Manager</h1>
+            </div>
+            <nav>
+                <button id="nav-dashboard" class="nav-btn active">Dashboard</button>
+                <button id="nav-add" class="nav-btn">Add Campaign</button>
+            </nav>
+        </header>
+
+        <main>
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="view">
+                <div class="section-header">
+                    <h2>Active Campaigns</h2>
+                    <span id="campaign-count" class="badge">0</span>
+                </div>
+                <div id="campaign-list" class="grid-container">
+                    <!-- Campaigns will be injected here -->
+                    <div class="loading-state">Loading campaigns...</div>
+                </div>
+            </section>
+
+            <!-- Add/Edit Campaign View -->
+            <section id="view-add" class="view hidden">
+                <div class="section-header">
+                    <h2 id="form-title">Configure New Campaign</h2>
+                    <button class="btn-text" onclick="showView('dashboard')">Cancel</button>
+                </div>
+                <form id="campaign-form" class="card shadow">
+                    <input type="hidden" id="campaign-id">
+                    
+                    <div class="form-group">
+                        <label for="name">Campaign Name</label>
+                        <input type="text" id="name" placeholder="e.g. Abandoned Cart Recovery" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="eventType">Event Type</label>
+                            <select id="eventType" required>
+                                <option value="abandoned_cart">abandoned_cart</option>
+                                <option value="order_created">order_created</option>
+                                <option value="order_shipped">order_shipped</option>
+                                <option value="order_cancelled">order_cancelled</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="replyUrl">Reply.cx Webhook URL</label>
+                        <input type="url" id="replyUrl" placeholder="https://api.reply.cx/webhook/..." required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="replyToken">Reply.cx API Token (Bearer)</label>
+                        <input type="password" id="replyToken" placeholder="Your API Token" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Variable Mappings</label>
+                        <p class="helper-text">Map Shopify field paths to Reply.cx variable names.</p>
+                        <div id="mapping-container">
+                            <!-- Mapping rows -->
+                            <div class="mapping-row">
+                                <input type="text" placeholder="shipping_address.phone" value="shipping_address.phone" class="map-path" required>
+                                <span class="arrow">→</span>
+                                <input type="text" placeholder="phone" value="phone" class="map-name" required>
+                                <button type="button" class="btn-icon remove-row" disabled>×</button>
+                            </div>
+                            <div class="mapping-row">
+                                <input type="text" placeholder="shipping_address.first_name" value="shipping_address.first_name" class="map-path" required>
+                                <span class="arrow">→</span>
+                                <input type="text" placeholder="first_name" value="first_name" class="map-name" required>
+                                <button type="button" class="btn-icon remove-row">×</button>
+                            </div>
+                        </div>
+                        <button type="button" id="add-mapping" class="btn-secondary">+ Add Mapping</button>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Save Campaign</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Success Section (Shown after save) -->
+            <section id="view-success" class="view hidden">
+                <div class="card success-card shadow">
+                    <div class="success-icon">✓</div>
+                    <h2>Campaign Saved!</h2>
+                    <p>Copy this URL and paste it into your Shopify Webhook settings for the selected event.</p>
+                    
+                    <div class="webhook-url-box">
+                        <code id="generated-url">https://your-app.vercel.app/api/webhook?event=...</code>
+                        <button id="copy-url-btn" class="btn-copy">Copy</button>
+                    </div>
+
+                    <div class="test-actions">
+                        <button id="test-campaign-btn" class="btn-secondary">Test with Dummy Payload</button>
+                    </div>
+                    
+                    <div id="test-result" class="test-result hidden">
+                        <h4>Test Result:</h4>
+                        <pre id="test-output"></pre>
+                    </div>
+
+                    <button class="btn-primary" onclick="showView('dashboard')">Back to Dashboard</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
