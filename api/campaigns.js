@@ -8,8 +8,11 @@ export default async function handler(req, res) {
   console.log('Supabase URL present:', !!supabaseUrl);
   console.log('Supabase Key present:', !!supabaseKey);
 
-  if (!supabaseUrl || !supabaseKey) {
-    return res.status(500).json({ error: 'Supabase credentials missing. Check Vercel Env Vars.' });
+  if (!supabaseUrl) {
+    return res.status(500).json({ error: 'Environment variable SUPABASE_URL is missing.' });
+  }
+  if (!supabaseKey) {
+    return res.status(500).json({ error: 'Environment variable SUPABASE_SERVICE_ROLE_KEY is missing.' });
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
