@@ -19,6 +19,12 @@ const navBtns = {
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
+    // Auth check
+    if (localStorage.getItem('isLoggedIn') !== 'true') {
+        window.location.href = 'login.html';
+        return;
+    }
+
     fetchCampaigns();
     setupEventListeners();
 });
@@ -28,6 +34,11 @@ function setupEventListeners() {
     navBtns.add.addEventListener('click', () => {
         resetForm();
         showView('add');
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', () => {
+        localStorage.removeItem('isLoggedIn');
+        window.location.href = 'login.html';
     });
 
     document.getElementById('campaign-form').addEventListener('submit', handleFormSubmit);
