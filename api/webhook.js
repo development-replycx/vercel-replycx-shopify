@@ -28,16 +28,25 @@ export default async function handler(req, res) {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    // Fetch active campaigns for this event (snake_case column name)
-    const { data: activeCampaigns, error } = await supabase
+    // Fetch all active campaigns
+    const { data: allActiveCampaigns, error } = await supabase
       .from('campaigns')
       .select('*')
-      .eq('event_type', event)
       .eq('status', 'active');
 
     if (error) throw error;
 
-    if (!activeCampaigns || activeCampaigns.length === 0) {
+    // Filter active campaigns matching the event (supporting multiple comma-separated event types)
+    const activeCampaigns = (allActiveCampaigns || []).filter(campaign => {
+      if (!campaign.event_type) return false;
+      const configuredEvents = campaign.event_type
+        .split(',')
+        .map(e => e.trim().toLowerCase())
+        .filter(Boolean);
+      return configuredEvents.includes(event.trim().toLowerCase());
+    });
+
+    if (activeCampaigns.length === 0) {
       return res.status(404).json({ error: `No active campaign found for event: ${event}` });
     }
 
