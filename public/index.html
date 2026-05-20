@@ -61,13 +61,20 @@
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="eventType">Event Type</label>
-                            <select id="eventType" required>
+                            <label for="eventType">Event Type(s)</label>
+                            <input type="text" id="eventType" list="eventSuggestions" placeholder="e.g. orders/create, checkouts/update" required>
+                            <datalist id="eventSuggestions">
                                 <option value="abandoned_cart">abandoned_cart</option>
                                 <option value="order_created">order_created</option>
                                 <option value="order_shipped">order_shipped</option>
                                 <option value="order_cancelled">order_cancelled</option>
-                            </select>
+                                <option value="orders/create">orders/create</option>
+                                <option value="checkouts/create">checkouts/create</option>
+                                <option value="checkouts/update">checkouts/update</option>
+                                <option value="draft_orders/create">draft_orders/create</option>
+                                <option value="customers/create">customers/create</option>
+                            </datalist>
+                            <p class="helper-text" style="margin-top: 0.25rem;">Enter one or more Shopify webhook events (e.g. <code>orders/create</code>). Separate multiple events with commas.</p>
                         </div>
                     </div>
 
@@ -115,9 +122,11 @@
                     <h2>Campaign Saved!</h2>
                     <p>Copy this URL and paste it into your Shopify Webhook settings for the selected event.</p>
                     
-                    <div class="webhook-url-box">
-                        <code id="generated-url">https://your-app.vercel.app/api/webhook?event=...</code>
-                        <button id="copy-url-btn" class="btn-copy">Copy</button>
+                    <div id="webhook-urls-container">
+                        <div class="webhook-url-box">
+                            <code id="generated-url">https://your-app.vercel.app/api/webhook?event=...</code>
+                            <button id="copy-url-btn" class="btn-copy">Copy</button>
+                        </div>
                     </div>
 
                     <div class="test-actions">

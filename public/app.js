@@ -49,7 +49,10 @@ function setupEventListeners() {
         }
     });
 
-    document.getElementById('copy-url-btn').addEventListener('click', copyWebhookUrl);
+    const copyUrlBtn = document.getElementById('copy-url-btn');
+    if (copyUrlBtn) {
+        copyUrlBtn.addEventListener('click', copyWebhookUrl);
+    }
     document.getElementById('test-campaign-btn').addEventListener('click', runTest);
 }
 
@@ -168,8 +171,27 @@ function renderDashboard() {
 }
 
 function showSuccess(campaign) {
-    const url = `${WEBHOOK_BASE_URL}?event=${campaign.event_type}`;
-    document.getElementById('generated-url').textContent = url;
+    const eventTypes = campaign.event_type.split(',').map(e => e.trim()).filter(Boolean);
+    const container = document.getElementById('webhook-urls-container');
+    
+    if (container) {
+        container.innerHTML = eventTypes.map((evt, idx) => {
+            const url = `${WEBHOOK_BASE_URL}?event=${encodeURIComponent(evt)}`;
+            return `
+                <div class="webhook-url-box" style="margin: 0.75rem 0;">
+                    <code id="generated-url-${idx}">${url}</code>
+                    <button type="button" class="btn-copy" onclick="copyDynamicUrl('${url}', this)">Copy</button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Set first event URL as test target
+    const testBtn = document.getElementById('test-campaign-btn');
+    if (testBtn && eventTypes.length > 0) {
+        testBtn.dataset.url = `${WEBHOOK_BASE_URL}?event=${encodeURIComponent(eventTypes[0])}`;
+    }
+    
     showView('success');
 }
 
@@ -227,10 +249,10 @@ function copyWebhookUrl() {
 }
 
 async function runTest() {
-    const url = document.getElementById('generated-url').textContent;
+    const btn = document.getElementById('test-campaign-btn');
+    const url = btn.dataset.url || `${WEBHOOK_BASE_URL}?event=${encodeURIComponent(campaigns.find(c => c.id === document.getElementById('campaign-id').value)?.event_type?.split(',')[0]?.trim() || '')}`;
     const testResult = document.getElementById('test-result');
     const testOutput = document.getElementById('test-output');
-    const btn = document.getElementById('test-campaign-btn');
     btn.disabled = true;
     const dummyPayload = { shipping_address: { phone: "9876543210", first_name: "John" } };
     try {
@@ -261,3 +283,14 @@ function showToast(msg, type = 'success') {
 window.showView = showView;
 window.editCampaign = editCampaign;
 window.deleteCampaign = deleteCampaign;
+window.copyDynamicUrl = function(url, btn) {
+    navigator.clipboard.writeText(url).then(() => {
+        const origText = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.style.backgroundColor = 'var(--success)';
+        setTimeout(() => {
+            btn.textContent = origText;
+            btn.style.backgroundColor = '';
+        }, 1500);
+    });
+};
