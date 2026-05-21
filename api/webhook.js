@@ -4,9 +4,12 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // Helper to get nested object values by path (e.g. "shipping_address.phone")
+// Supports dot notation and array indices like "fulfillments[0].tracking_number" or "fulfillments.0.tracking_number"
 function getByPath(obj, path) {
   if (!path) return null;
-  return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+  // Normalize array bracket notation (e.g., fulfillments[0] -> fulfillments.0)
+  const normalizedPath = path.replace(/\[(\d+)\]/g, '.$1');
+  return normalizedPath.split('.').reduce((acc, part) => acc && acc[part], obj);
 }
 
 export default async function handler(req, res) {
