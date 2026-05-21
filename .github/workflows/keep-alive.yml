@@ -1,0 +1,40 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+export default async function handler(req, res) {
+  // Restrict to GET requests (standard for Vercel Cron)
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  if (!supabaseUrl || !supabaseKey) {
+    return res.status(500).json({ error: 'Supabase credentials missing' });
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  try {
+    // Run a lightweight query to ensure Supabase database activity
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('id')
+      .limit(1);
+
+    if (error) throw error;
+
+    return res.status(200).json({
+      success: true,
+      message: 'Supabase keep-alive check successful',
+      timestamp: new Date().toISOString(),
+      active: true
+    });
+  } catch (error) {
+    console.error('Keep-alive query error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Database query failed'
+    });
+  }
+}
