@@ -1,40 +1,19 @@
-import { createClient } from '@supabase/supabase-js';
+name: Supabase Keep Alive
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+on:
+  schedule:
+    # Runs at 00:00 UTC every 3 days
+    - cron: '0 0 */3 * *'
+  workflow_dispatch: {}
 
-export default async function handler(req, res) {
-  // Restrict to GET requests (standard for Vercel Cron)
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
-
-  if (!supabaseUrl || !supabaseKey) {
-    return res.status(500).json({ error: 'Supabase credentials missing' });
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  try {
-    // Run a lightweight query to ensure Supabase database activity
-    const { data, error } = await supabase
-      .from('campaigns')
-      .select('id')
-      .limit(1);
-
-    if (error) throw error;
-
-    return res.status(200).json({
-      success: true,
-      message: 'Supabase keep-alive check successful',
-      timestamp: new Date().toISOString(),
-      active: true
-    });
-  } catch (error) {
-    console.error('Keep-alive query error:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message || 'Database query failed'
-    });
-  }
-}
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase Database Table
+        run: |
+          curl -f -s -X GET "https://nevtpxnlndeibqwndqiz.supabase.co/rest/v1/campaigns?select=id&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ldnRweG5sbmRlaWJxd25kcWl6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODY2ODE4NiwiZXhwIjoyMDk0MjQ0MTg2fQ.002v84bp-4eYT8T118f3L3_ux42seSH91plepeg5I8g" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ldnRweG5sbmRlaWJxd25kcWl6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODY2ODE4NiwiZXhwIjoyMDk0MjQ0MTg2fQ.002v84bp-4eYT8T118f3L3_ux42seSH91plepeg5I8g" \
+            -o /dev/null
+          echo "Successfully triggered keep-alive query on Supabase campaigns table!"
