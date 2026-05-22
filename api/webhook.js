@@ -73,6 +73,14 @@ export default async function handler(req, res) {
               value = `+91${digits}`;
             }
           }
+
+          // Hardcoded rule: Clean order name (e.g., "1306.1" -> "1306")
+          if ((mapping.name === 'name' || mapping.path === 'name') && value) {
+            const strVal = value.toString().trim();
+            if (strVal.includes('.')) {
+              value = strVal.split('.')[0];
+            }
+          }
           
           mappedData[mapping.name] = value;
         });
