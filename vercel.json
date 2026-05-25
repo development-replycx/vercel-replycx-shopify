@@ -1,15 +1,5 @@
 {
   "outputDirectory": "public",
   "cleanUrls": true,
-  "trailingSlash": false,
-  "crons": [
-    {
-      "path": "/api/process-abandoned-checkouts",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/keep-alive",
-      "schedule": "0 12 * * *"
-    }
-  ]
+  "trailingSlash": false
 }
