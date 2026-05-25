@@ -158,17 +158,15 @@ async function deleteCachedCheckout(supabase, cartToken) {
   }
 }
 
-// Helper to format phone numbers to +91 international standard for Reply.cx
+// Helper to format phone numbers to 91XXXXXXXXXX for Reply.cx
 function formatPhoneNumber(value) {
   if (!value) return null;
-  const raw = value.toString().trim();
-  const digits = raw.replace(/\D/g, '');
+  const digits = value.toString().replace(/\D/g, '');
 
-  if (raw.startsWith('+91')) return `+91${digits.slice(2)}`;
-  if (digits.startsWith('91')) return `+${digits}`;
-  if (digits.length === 10) return `+91${digits}`;
+  if (digits.startsWith('91')) return digits;
+  if (digits.length === 10) return `91${digits}`;
 
-  return digits ? `+91${digits}` : null;
+  return digits ? `91${digits}` : null;
 }
 
 // Helper to get nested object values by path (e.g. "shipping_address.phone")
