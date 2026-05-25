@@ -109,14 +109,15 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, message: 'Abandoned Cart flow is inactive.' });
       }
 
-      // Extract details
-      const rawPhone = getByPath(payload, 'shipping_address.phone') || payload.phone;
-      const first_name = getByPath(payload, 'shipping_address.first_name') || payload.first_name || '';
+      // Extract checkout details from the checkout payload.
+      const rawPhone = getByPath(payload, 'shipping_address.phone');
+      const first_name = getByPath(payload, 'shipping_address.first_name') || '';
       const phone = formatPhoneNumber(rawPhone) || '';
+      const orders_count = getByPath(payload, 'customer.orders_count') || 0;
 
       // Save to warm cache
-      cartStorage.set(cart_token, { phone, first_name, ordered: false });
-      logDebug('checkout_cached', { cart_token, phone, first_name });
+      cartStorage.set(cart_token, { phone, first_name, orders_count, ordered: false });
+      logDebug('checkout_cached', { cart_token, phone, first_name, orders_count });
       console.log(`[Abandoned Cart] Saved checkout to temp cache. cart_token: ${cart_token}`);
 
       // Read delay minutes
@@ -175,6 +176,7 @@ export default async function handler(req, res) {
             body: JSON.stringify({
               phone: record.phone,
               first_name: record.first_name,
+              orders_count: record.orders_count,
               cart_token: cart_token
             })
           });
@@ -184,6 +186,7 @@ export default async function handler(req, res) {
             cart_token,
             phone: record.phone,
             first_name: record.first_name,
+            orders_count: record.orders_count,
             status: response.status,
             response: responseText
           });
