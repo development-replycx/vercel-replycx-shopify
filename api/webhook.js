@@ -10,6 +10,11 @@ if (!global.cartStorage) {
 }
 const cartStorage = global.cartStorage;
 
+if (!global.cartTimers) {
+  global.cartTimers = new Map();
+}
+const cartTimers = global.cartTimers;
+
 // Initialize global debug logs for easy local diagnostics
 if (!global.webhookDebugLogs) {
   global.webhookDebugLogs = [];
@@ -85,6 +90,7 @@ async function cacheCheckout(supabase, record) {
       first_name: record.first_name,
       orders_count: record.orders_count,
       ordered: record.ordered,
+      job_id: record.job_id,
       updated_at: new Date().toISOString()
     }, { onConflict: 'cart_token' });
 
@@ -116,7 +122,7 @@ async function getCachedCheckout(supabase, cartToken) {
 
   const { data, error } = await supabase
     .from('abandoned_checkouts')
-    .select('phone,first_name,orders_count,ordered')
+    .select('phone,first_name,orders_count,ordered,job_id')
     .eq('cart_token', cartToken)
     .maybeSingle();
 
@@ -131,7 +137,8 @@ async function getCachedCheckout(supabase, cartToken) {
     phone: data.phone || '',
     first_name: data.first_name || '',
     orders_count: data.orders_count || 0,
-    ordered: !!data.ordered
+    ordered: !!data.ordered,
+    job_id: data.job_id || null
   };
   cartStorage.set(cartToken, record);
   return record;
@@ -139,6 +146,10 @@ async function getCachedCheckout(supabase, cartToken) {
 
 async function deleteCachedCheckout(supabase, cartToken) {
   cartStorage.delete(cartToken);
+  if (cartTimers.has(cartToken)) {
+    clearTimeout(cartTimers.get(cartToken));
+    cartTimers.delete(cartToken);
+  }
 
   const { error } = await supabase
     .from('abandoned_checkouts')
@@ -244,11 +255,12 @@ export default async function handler(req, res) {
       const first_name = getByPath(payload, 'shipping_address.first_name') || '';
       const phone = formatPhoneNumber(rawPhone) || '';
       const orders_count = getByPath(payload, 'customer.orders_count') || 0;
+      const job_id = `${cart_token}:${Date.now()}`;
 
       // Save to warm cache
-      cartStorage.set(cart_token, { phone, first_name, orders_count, ordered: false });
-      await cacheCheckout(supabase, { cart_token, phone, first_name, orders_count, ordered: false });
-      await logDebug('checkout_cached', { cart_token, phone, first_name, orders_count });
+      cartStorage.set(cart_token, { phone, first_name, orders_count, ordered: false, job_id });
+      await cacheCheckout(supabase, { cart_token, phone, first_name, orders_count, ordered: false, job_id });
+      await logDebug('checkout_cached', { cart_token, phone, first_name, orders_count, job_id });
       console.log(`[Abandoned Cart] Saved checkout to temp cache. cart_token: ${cart_token}`);
 
       // Read delay minutes
@@ -265,15 +277,29 @@ export default async function handler(req, res) {
 
       console.log(`[Abandoned Cart] Scheduling delayed job for cart_token: ${cart_token} in ${delayMinutes} minutes.`);
 
+      if (cartTimers.has(cart_token)) {
+        clearTimeout(cartTimers.get(cart_token));
+        cartTimers.delete(cart_token);
+        await logDebug('duplicate_job_replaced', { cart_token, phone, delay_minutes: delayMinutes });
+      }
+
       // Start delayed job
-      setTimeout(async () => {
+      const timer = setTimeout(async () => {
+        let shouldDeleteCache = true;
         try {
+          cartTimers.delete(cart_token);
           await logDebug('delay_timer_fired', { cart_token });
 
           const record = await getCachedCheckout(supabase, cart_token);
           if (!record) {
             await logDebug('job_skipped', { cart_token, reason: 'No cached checkout found' });
             console.log(`[Abandoned Cart] Delayed job fired: No record found for cart_token: ${cart_token}`);
+            return;
+          }
+
+          if (record.job_id && record.job_id !== job_id) {
+            shouldDeleteCache = false;
+            await logDebug('duplicate_job_skipped', { cart_token, phone: record.phone, current_job_id: record.job_id, stale_job_id: job_id });
             return;
           }
 
@@ -311,13 +337,14 @@ export default async function handler(req, res) {
             headers['Authorization'] = `Bearer ${latestCampaign.reply_token}`;
           }
 
-          const replyPayload = {
-            phone: record.phone,
-            first_name: record.first_name,
-            orders_count: record.orders_count,
-            cart_token: cart_token
+          const replyRequestBody = {
+            data: [[
+              record.phone,
+              record.first_name,
+              cart_token,
+              String(record.orders_count || 0)
+            ]]
           };
-          const replyRequestBody = { data: [replyPayload] };
 
           await logDebug('replycx_post_sending', {
             cart_token,
@@ -374,10 +401,13 @@ export default async function handler(req, res) {
           console.error(`[Abandoned Cart] Error executing delayed job for cart_token: ${cart_token}`, err);
         } finally {
           // Purge temp cache entry
-          await deleteCachedCheckout(supabase, cart_token);
-          console.log(`[Abandoned Cart] Purged checkout cache for cart_token: ${cart_token}`);
+          if (shouldDeleteCache) {
+            await deleteCachedCheckout(supabase, cart_token);
+            console.log(`[Abandoned Cart] Purged checkout cache for cart_token: ${cart_token}`);
+          }
         }
       }, delayMinutes * 60 * 1000);
+      cartTimers.set(cart_token, timer);
 
       return res.status(200).json({ success: true, message: 'Checkout update received silently' });
     } catch (err) {
