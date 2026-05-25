@@ -277,8 +277,10 @@ export default async function handler(req, res) {
             return;
           }
 
+          await logDebug('job_fired', { cart_token, phone: record.phone });
+
           if (record.ordered) {
-            await logDebug('job_skipped', { cart_token, phone: record.phone, reason: 'Suppression active (ordered = true)' });
+            await logDebug('suppressed', { cart_token, reason: 'order placed' });
             console.log(`[Abandoned Cart] Delayed job fired: Suppression active (ordered = true) for cart_token: ${cart_token}`);
             return;
           }
@@ -315,6 +317,7 @@ export default async function handler(req, res) {
             orders_count: record.orders_count,
             cart_token: cart_token
           };
+          const replyRequestBody = { data: [replyPayload] };
 
           await logDebug('replycx_post_sending', {
             cart_token,
@@ -323,7 +326,7 @@ export default async function handler(req, res) {
             reply_url: getUrlPreview(latestCampaign.reply_url),
             has_reply_token: !!latestCampaign.reply_token,
             reply_token_preview: maskSecret(latestCampaign.reply_token),
-            payload: replyPayload
+            payload: replyRequestBody
           });
 
           let response;
@@ -331,7 +334,7 @@ export default async function handler(req, res) {
             response = await fetch(latestCampaign.reply_url, {
               method: 'POST',
               headers,
-              body: JSON.stringify(replyPayload)
+              body: JSON.stringify(replyRequestBody)
             });
           } catch (err) {
             await logDebug('replycx_trigger_failed', {
