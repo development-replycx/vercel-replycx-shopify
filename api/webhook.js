@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let debugSupabase = null;
 
 // Initialize global in-memory cart storage (survives hot reloads within the same Node process)
 if (!global.cartStorage) {
@@ -9,18 +10,44 @@ if (!global.cartStorage) {
 }
 const cartStorage = global.cartStorage;
 
-// Initialize global debug logs for easy diagnostics
+// Initialize global debug logs for easy local diagnostics
 if (!global.webhookDebugLogs) {
   global.webhookDebugLogs = [];
 }
-function logDebug(type, details) {
-  global.webhookDebugLogs.unshift({
+
+function getDebugSupabase() {
+  if (!supabaseUrl || !supabaseKey) return null;
+  if (!debugSupabase) {
+    debugSupabase = createClient(supabaseUrl, supabaseKey);
+  }
+  return debugSupabase;
+}
+
+async function logDebug(type, details) {
+  const entry = {
     timestamp: new Date().toISOString(),
     type,
     details
-  });
+  };
+
+  global.webhookDebugLogs.unshift(entry);
   if (global.webhookDebugLogs.length > 30) {
     global.webhookDebugLogs.pop();
+  }
+
+  const supabase = getDebugSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from('webhook_debug_logs')
+    .insert({
+      type,
+      details,
+      created_at: entry.timestamp
+    });
+
+  if (error) {
+    console.error('[Debug Logs] Failed to persist log:', error.message);
   }
 }
 
@@ -68,7 +95,7 @@ export default async function handler(req, res) {
         const record = cartStorage.get(orderCartToken);
         record.ordered = true;
         cartStorage.set(orderCartToken, record);
-        logDebug('order_suppression', { cart_token: orderCartToken, status: 'suppressed' });
+        await logDebug('order_suppression', { cart_token: orderCartToken, status: 'suppressed' });
         console.log(`[Abandoned Cart] Suppressing recovery: Order created for cart_token: ${orderCartToken}`);
       }
     }
@@ -79,7 +106,7 @@ export default async function handler(req, res) {
     try {
       const cart_token = payload.cart_token;
       if (!cart_token) {
-        logDebug('checkout_ignored', { reason: 'Missing cart_token', payloadKeys: Object.keys(payload) });
+        await logDebug('checkout_ignored', { reason: 'Missing cart_token', payloadKeys: Object.keys(payload) });
         return res.status(200).json({ success: true, message: 'No cart_token in payload, skipped' });
       }
 
@@ -98,13 +125,13 @@ export default async function handler(req, res) {
         .single();
 
       if (error || !campaign) {
-        logDebug('checkout_ignored', { cart_token, reason: 'Flow settings not found in Supabase' });
+        await logDebug('checkout_ignored', { cart_token, reason: 'Flow settings not found in Supabase' });
         console.log(`[Abandoned Cart] Flow is not configured or error fetching: ${error ? error.message : 'Not configured'}`);
         return res.status(200).json({ success: true, message: 'Abandoned Cart flow is not configured.' });
       }
 
       if (campaign.status !== 'active') {
-        logDebug('checkout_ignored', { cart_token, reason: 'Flow is currently inactive' });
+        await logDebug('checkout_ignored', { cart_token, reason: 'Flow is currently inactive' });
         console.log('[Abandoned Cart] Flow is currently inactive.');
         return res.status(200).json({ success: true, message: 'Abandoned Cart flow is inactive.' });
       }
@@ -117,7 +144,7 @@ export default async function handler(req, res) {
 
       // Save to warm cache
       cartStorage.set(cart_token, { phone, first_name, orders_count, ordered: false });
-      logDebug('checkout_cached', { cart_token, phone, first_name, orders_count });
+      await logDebug('checkout_cached', { cart_token, phone, first_name, orders_count });
       console.log(`[Abandoned Cart] Saved checkout to temp cache. cart_token: ${cart_token}`);
 
       // Read delay minutes
@@ -139,13 +166,13 @@ export default async function handler(req, res) {
         try {
           const record = cartStorage.get(cart_token);
           if (!record) {
-            logDebug('job_skipped', { cart_token, reason: 'No cached checkout found' });
+            await logDebug('job_skipped', { cart_token, reason: 'No cached checkout found' });
             console.log(`[Abandoned Cart] Delayed job fired: No record found for cart_token: ${cart_token}`);
             return;
           }
 
           if (record.ordered) {
-            logDebug('job_skipped', { cart_token, phone: record.phone, reason: 'Suppression active (ordered = true)' });
+            await logDebug('job_skipped', { cart_token, phone: record.phone, reason: 'Suppression active (ordered = true)' });
             console.log(`[Abandoned Cart] Delayed job fired: Suppression active (ordered = true) for cart_token: ${cart_token}`);
             return;
           }
@@ -158,7 +185,7 @@ export default async function handler(req, res) {
             .single();
 
           if (!latestCampaign || latestCampaign.status !== 'active' || !latestCampaign.reply_url) {
-            logDebug('job_failed', { cart_token, reason: 'Campaign inactive or URL not set at runtime' });
+            await logDebug('job_failed', { cart_token, reason: 'Campaign inactive or URL not set at runtime' });
             console.warn('[Abandoned Cart] Delayed job fired: Webhook URL is not configured or flow is inactive.');
             return;
           }
@@ -182,7 +209,7 @@ export default async function handler(req, res) {
           });
 
           const responseText = await response.text();
-          logDebug('reply_triggered', {
+          await logDebug('reply_triggered', {
             cart_token,
             phone: record.phone,
             first_name: record.first_name,
@@ -199,7 +226,7 @@ export default async function handler(req, res) {
             .eq('id', '11111111-1111-1111-1111-111111111111');
 
         } catch (err) {
-          logDebug('job_error', { cart_token, error: err.message });
+          await logDebug('job_error', { cart_token, error: err.message });
           console.error(`[Abandoned Cart] Error executing delayed job for cart_token: ${cart_token}`, err);
         } finally {
           // Purge temp cache entry
@@ -210,7 +237,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({ success: true, message: 'Checkout update received silently' });
     } catch (err) {
-      logDebug('checkout_error', { error: err.message });
+      await logDebug('checkout_error', { error: err.message });
       console.error('[Abandoned Cart] Error handling checkouts/update:', err);
       return res.status(500).json({ error: err.message });
     }
