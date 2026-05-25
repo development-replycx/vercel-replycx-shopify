@@ -9,6 +9,21 @@ if (!global.cartStorage) {
 }
 const cartStorage = global.cartStorage;
 
+// Initialize global debug logs for easy diagnostics
+if (!global.webhookDebugLogs) {
+  global.webhookDebugLogs = [];
+}
+function logDebug(type, details) {
+  global.webhookDebugLogs.unshift({
+    timestamp: new Date().toISOString(),
+    type,
+    details
+  });
+  if (global.webhookDebugLogs.length > 30) {
+    global.webhookDebugLogs.pop();
+  }
+}
+
 // Helper to format phone numbers to +91 international standard for Reply.cx
 function formatPhoneNumber(value) {
   if (!value) return null;
@@ -53,6 +68,7 @@ export default async function handler(req, res) {
         const record = cartStorage.get(orderCartToken);
         record.ordered = true;
         cartStorage.set(orderCartToken, record);
+        logDebug('order_suppression', { cart_token: orderCartToken, status: 'suppressed' });
         console.log(`[Abandoned Cart] Suppressing recovery: Order created for cart_token: ${orderCartToken}`);
       }
     }
@@ -63,6 +79,7 @@ export default async function handler(req, res) {
     try {
       const cart_token = payload.cart_token;
       if (!cart_token) {
+        logDebug('checkout_ignored', { reason: 'Missing cart_token', payloadKeys: Object.keys(payload) });
         return res.status(200).json({ success: true, message: 'No cart_token in payload, skipped' });
       }
 
@@ -81,11 +98,13 @@ export default async function handler(req, res) {
         .single();
 
       if (error || !campaign) {
+        logDebug('checkout_ignored', { cart_token, reason: 'Flow settings not found in Supabase' });
         console.log(`[Abandoned Cart] Flow is not configured or error fetching: ${error ? error.message : 'Not configured'}`);
         return res.status(200).json({ success: true, message: 'Abandoned Cart flow is not configured.' });
       }
 
       if (campaign.status !== 'active') {
+        logDebug('checkout_ignored', { cart_token, reason: 'Flow is currently inactive' });
         console.log('[Abandoned Cart] Flow is currently inactive.');
         return res.status(200).json({ success: true, message: 'Abandoned Cart flow is inactive.' });
       }
@@ -97,6 +116,7 @@ export default async function handler(req, res) {
 
       // Save to warm cache
       cartStorage.set(cart_token, { phone, first_name, ordered: false });
+      logDebug('checkout_cached', { cart_token, phone, first_name });
       console.log(`[Abandoned Cart] Saved checkout to temp cache. cart_token: ${cart_token}`);
 
       // Read delay minutes
@@ -118,12 +138,14 @@ export default async function handler(req, res) {
         try {
           const record = cartStorage.get(cart_token);
           if (!record) {
-            console.log(`[Abandoned Cart] Delayed job fired: No record found for cart_token: ${cart_token} (already cleaned up or bought)`);
+            logDebug('job_skipped', { cart_token, reason: 'No cached checkout found' });
+            console.log(`[Abandoned Cart] Delayed job fired: No record found for cart_token: ${cart_token}`);
             return;
           }
 
           if (record.ordered) {
-            console.log(`[Abandoned Cart] Delayed job fired: Suppression active (ordered = true) for cart_token: ${cart_token}. Skipping Reply.cx message.`);
+            logDebug('job_skipped', { cart_token, phone: record.phone, reason: 'Suppression active (ordered = true)' });
+            console.log(`[Abandoned Cart] Delayed job fired: Suppression active (ordered = true) for cart_token: ${cart_token}`);
             return;
           }
 
@@ -135,6 +157,7 @@ export default async function handler(req, res) {
             .single();
 
           if (!latestCampaign || latestCampaign.status !== 'active' || !latestCampaign.reply_url) {
+            logDebug('job_failed', { cart_token, reason: 'Campaign inactive or URL not set at runtime' });
             console.warn('[Abandoned Cart] Delayed job fired: Webhook URL is not configured or flow is inactive.');
             return;
           }
@@ -157,6 +180,13 @@ export default async function handler(req, res) {
           });
 
           const responseText = await response.text();
+          logDebug('reply_triggered', {
+            cart_token,
+            phone: record.phone,
+            first_name: record.first_name,
+            status: response.status,
+            response: responseText
+          });
           console.log(`[Abandoned Cart] Reply.cx Webhook response: ${response.status} - ${responseText}`);
 
           // Update last triggered timestamp
@@ -166,6 +196,7 @@ export default async function handler(req, res) {
             .eq('id', '11111111-1111-1111-1111-111111111111');
 
         } catch (err) {
+          logDebug('job_error', { cart_token, error: err.message });
           console.error(`[Abandoned Cart] Error executing delayed job for cart_token: ${cart_token}`, err);
         } finally {
           // Purge temp cache entry
@@ -176,6 +207,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({ success: true, message: 'Checkout update received silently' });
     } catch (err) {
+      logDebug('checkout_error', { error: err.message });
       console.error('[Abandoned Cart] Error handling checkouts/update:', err);
       return res.status(500).json({ error: err.message });
     }
