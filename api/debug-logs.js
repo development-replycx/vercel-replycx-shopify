@@ -13,7 +13,7 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function renderHtml({ source, logs, warning, error }) {
+function renderHtml({ source, logs, warning, error, processorResult }) {
   const rows = logs.map(log => {
     const details = JSON.stringify(log.details || {}, null, 2);
     return `
@@ -69,13 +69,19 @@ function renderHtml({ source, logs, warning, error }) {
       </div>
       <div class="actions">
         <a class="button" href="/api/debug-logs?format=json">JSON</a>
+        <form method="post">
+          <input type="hidden" name="action" value="process_due">
+          <button type="submit">Run due jobs now</button>
+        </form>
         <form method="post" onsubmit="return confirm('Clear all webhook debug logs?');">
+          <input type="hidden" name="action" value="clear_logs">
           <button type="submit">Clear logs</button>
         </form>
       </div>
     </header>
     ${warning ? `<div class="notice">${escapeHtml(warning)}</div>` : ''}
     ${error ? `<div class="notice error">${escapeHtml(error)}</div>` : ''}
+    ${processorResult ? `<div class="notice">Processor result: ${escapeHtml(JSON.stringify(processorResult))}</div>` : ''}
     ${rows || '<div class="empty">No logs found.</div>'}
   </main>
 </body>
@@ -98,6 +104,22 @@ async function clearLogs(supabase) {
   return { source: 'supabase', deleted: true };
 }
 
+async function processDueJobs(req) {
+  const host = req.headers.host;
+  const proto = req.headers['x-forwarded-proto'] || 'https';
+  const response = await fetch(`${proto}://${host}/api/process-abandoned-checkouts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  const text = await response.text();
+
+  try {
+    return { status: response.status, body: JSON.parse(text) };
+  } catch {
+    return { status: response.status, body: text };
+  }
+}
+
 export default async function handler(req, res) {
   if (!['GET', 'POST', 'DELETE'].includes(req.method)) {
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -110,15 +132,25 @@ export default async function handler(req, res) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+  let processorResult = null;
 
   if (req.method === 'POST' || req.method === 'DELETE') {
     try {
-      const result = await clearLogs(supabase);
-      if (wantsJson(req) || req.method === 'DELETE') {
-        return res.status(200).json(result);
+      const action = req.body?.action || req.query.action || 'clear_logs';
+
+      if (action === 'process_due') {
+        processorResult = await processDueJobs(req);
+        if (wantsJson(req)) {
+          return res.status(200).json(processorResult);
+        }
+      } else {
+        const result = await clearLogs(supabase);
+        if (wantsJson(req) || req.method === 'DELETE') {
+          return res.status(200).json(result);
+        }
+        res.setHeader('Location', '/api/debug-logs');
+        return res.status(303).end();
       }
-      res.setHeader('Location', '/api/debug-logs');
-      return res.status(303).end();
     } catch (error) {
       return res.status(500).json({ error: error.message });
     }
@@ -128,7 +160,8 @@ export default async function handler(req, res) {
     const payload = {
       source: 'memory',
       warning: 'Supabase credentials are missing, so only warm in-memory logs are available.',
-      logs: global.webhookDebugLogs
+      logs: global.webhookDebugLogs,
+      processorResult
     };
     if (wantsJson(req)) return res.status(200).json(payload);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -156,7 +189,8 @@ export default async function handler(req, res) {
         'create index if not exists webhook_debug_logs_created_at_idx on public.webhook_debug_logs (created_at desc);'
       ].join('\n'),
       memory_logs: global.webhookDebugLogs,
-      logs: global.webhookDebugLogs
+      logs: global.webhookDebugLogs,
+      processorResult
     };
     if (wantsJson(req)) return res.status(500).json(payload);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -165,7 +199,8 @@ export default async function handler(req, res) {
 
   const payload = {
     source: 'supabase',
-    logs: data || []
+    logs: data || [],
+    processorResult
   };
 
   if (wantsJson(req)) return res.status(200).json(payload);
