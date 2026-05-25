@@ -116,10 +116,7 @@ async function markCheckoutOrdered(cartToken) {
   }
 }
 
-async function getCachedCheckout(supabase, cartToken) {
-  const memoryRecord = cartStorage.get(cartToken);
-  if (memoryRecord) return memoryRecord;
-
+async function getLatestCachedCheckout(supabase, cartToken) {
   const { data, error } = await supabase
     .from('abandoned_checkouts')
     .select('phone,first_name,orders_count,ordered,job_id')
@@ -164,14 +161,14 @@ async function deleteCachedCheckout(supabase, cartToken) {
 // Helper to format phone numbers to +91 international standard for Reply.cx
 function formatPhoneNumber(value) {
   if (!value) return null;
-  const digits = value.toString().replace(/\D/g, '');
-  if (digits.length === 12 && digits.startsWith('91')) {
-    return `+${digits}`;
-  } else if (digits.length === 10) {
-    return `+91${digits}`;
-  } else {
-    return `+91${digits}`;
-  }
+  const raw = value.toString().trim();
+  const digits = raw.replace(/\D/g, '');
+
+  if (raw.startsWith('+91')) return `+91${digits.slice(2)}`;
+  if (digits.startsWith('91')) return `+${digits}`;
+  if (digits.length === 10) return `+91${digits}`;
+
+  return digits ? `+91${digits}` : null;
 }
 
 // Helper to get nested object values by path (e.g. "shipping_address.phone")
@@ -290,9 +287,9 @@ export default async function handler(req, res) {
           cartTimers.delete(cart_token);
           await logDebug('delay_timer_fired', { cart_token });
 
-          const record = await getCachedCheckout(supabase, cart_token);
+          const record = await getLatestCachedCheckout(supabase, cart_token);
           if (!record) {
-            await logDebug('job_skipped', { cart_token, reason: 'No cached checkout found' });
+            await logDebug('no_data_found', { cart_token });
             console.log(`[Abandoned Cart] Delayed job fired: No record found for cart_token: ${cart_token}`);
             return;
           }
