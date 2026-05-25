@@ -9,11 +9,13 @@ const WEBHOOK_BASE_URL = window.location.origin + '/api/webhook';
 const views = {
     dashboard: document.getElementById('view-dashboard'),
     add: document.getElementById('view-add'),
+    abandoned: document.getElementById('view-abandoned'),
     success: document.getElementById('view-success')
 };
 
 const navBtns = {
     dashboard: document.getElementById('nav-dashboard'),
+    abandoned: document.getElementById('nav-abandoned'),
     add: document.getElementById('nav-add')
 };
 
@@ -27,10 +29,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     fetchCampaigns();
     setupEventListeners();
+    setupAbandonedCartCopyBtns();
 });
+
+function setupAbandonedCartCopyBtns() {
+    const copyCheckoutBtn = document.getElementById('copy-checkout-url-btn');
+    if (copyCheckoutBtn) {
+        copyCheckoutBtn.addEventListener('click', () => {
+            const url = document.getElementById('abandoned-checkout-webhook-url').textContent;
+            navigator.clipboard.writeText(url).then(() => showToast('Copied Checkout webhook URL!'));
+        });
+    }
+
+    const copyOrderBtn = document.getElementById('copy-order-url-btn');
+    if (copyOrderBtn) {
+        copyOrderBtn.addEventListener('click', () => {
+            const url = document.getElementById('abandoned-order-webhook-url').textContent;
+            navigator.clipboard.writeText(url).then(() => showToast('Copied Order webhook URL!'));
+        });
+    }
+}
 
 function setupEventListeners() {
     navBtns.dashboard.addEventListener('click', () => showView('dashboard'));
+    navBtns.abandoned.addEventListener('click', () => {
+        loadAbandonedCartSettings();
+        showView('abandoned');
+    });
     navBtns.add.addEventListener('click', () => {
         resetForm();
         showView('add');
@@ -42,6 +67,7 @@ function setupEventListeners() {
     });
 
     document.getElementById('campaign-form').addEventListener('submit', handleFormSubmit);
+    document.getElementById('abandoned-form').addEventListener('submit', handleAbandonedSubmit);
     document.getElementById('add-mapping').addEventListener('click', addMappingRow);
     document.getElementById('mapping-container').addEventListener('click', (e) => {
         if (e.target.classList.contains('remove-row')) {
@@ -147,14 +173,17 @@ async function deleteCampaign(id) {
 function renderDashboard() {
     const list = document.getElementById('campaign-list');
     const count = document.getElementById('campaign-count');
-    count.textContent = campaigns.length;
     
-    if (campaigns.length === 0) {
+    // Filter out the special Abandoned Cart setting so it is kept separate
+    const filteredCampaigns = campaigns.filter(c => c.id !== '11111111-1111-1111-1111-111111111111');
+    count.textContent = filteredCampaigns.length;
+    
+    if (filteredCampaigns.length === 0) {
         list.innerHTML = '<div class="card shadow" style="grid-column: 1/-1; text-align: center; color: var(--text-muted);">No campaigns found.</div>';
         return;
     }
 
-    list.innerHTML = campaigns.map(c => `
+    list.innerHTML = filteredCampaigns.map(c => `
         <div class="card campaign-card shadow">
             <h3>${c.name}</h3>
             <div class="campaign-meta">
@@ -278,6 +307,80 @@ function showToast(msg, type = 'success') {
     toast.style.background = type === 'danger' ? 'var(--danger)' : 'var(--text-main)';
     toast.classList.remove('hidden');
     setTimeout(() => toast.classList.add('hidden'), 4000);
+}
+
+async function loadAbandonedCartSettings() {
+    const baseWebhookUrl = window.location.origin + '/api/webhook';
+    document.getElementById('abandoned-checkout-webhook-url').textContent = `${baseWebhookUrl}?event=checkouts/update`;
+    document.getElementById('abandoned-order-webhook-url').textContent = `${baseWebhookUrl}?event=orders/create`;
+
+    try {
+        const res = await fetch(API_URL);
+        if (res.ok) {
+            const list = await res.json();
+            const setting = list.find(c => c.id === '11111111-1111-1111-1111-111111111111');
+            if (setting) {
+                document.getElementById('abandoned-enabled').checked = setting.status === 'active';
+                document.getElementById('abandoned-reply-url').value = setting.reply_url || '';
+                document.getElementById('abandoned-reply-token').value = setting.reply_token || '';
+                
+                let delay = 60;
+                if (setting.mappings) {
+                    let parsedMappings = setting.mappings;
+                    if (typeof setting.mappings === 'string') {
+                        try { parsedMappings = JSON.parse(setting.mappings); } catch (e) {}
+                    }
+                    if (parsedMappings && parsedMappings.delay_minutes !== undefined) {
+                        delay = parsedMappings.delay_minutes;
+                    }
+                }
+                document.getElementById('abandoned-delay').value = delay;
+            } else {
+                document.getElementById('abandoned-enabled').checked = false;
+                document.getElementById('abandoned-reply-url').value = '';
+                document.getElementById('abandoned-reply-token').value = '';
+                document.getElementById('abandoned-delay').value = 60;
+            }
+        }
+    } catch (err) {
+        showToast('Error loading settings: ' + err.message, 'danger');
+    }
+}
+
+async function handleAbandonedSubmit(e) {
+    e.preventDefault();
+    
+    const enabled = document.getElementById('abandoned-enabled').checked;
+    const reply_url = document.getElementById('abandoned-reply-url').value;
+    const reply_token = document.getElementById('abandoned-reply-token').value;
+    const delay_minutes = parseInt(document.getElementById('abandoned-delay').value, 10) || 60;
+
+    const payload = {
+        id: '11111111-1111-1111-1111-111111111111',
+        name: 'Abandoned Cart Flow',
+        event_type: 'checkouts/update',
+        reply_url,
+        reply_token,
+        status: enabled ? 'active' : 'inactive',
+        mappings: { delay_minutes }
+    };
+
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Abandoned Cart settings saved successfully!');
+        } else {
+            showToast(`Error: ${data.error || 'Failed to save settings'}`, 'danger');
+        }
+    } catch (err) {
+        showToast(`System Error: ${err.message}`, 'danger');
+    }
 }
 
 window.showView = showView;

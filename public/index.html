@@ -27,6 +27,7 @@
             </div>
             <nav>
                 <button id="nav-dashboard" class="nav-btn active">Dashboard</button>
+                <button id="nav-abandoned" class="nav-btn">Abandoned Cart</button>
                 <button id="nav-add" class="nav-btn">Add Campaign</button>
                 <button id="logout-btn" class="btn-logout" style="margin-left: 1rem;">Logout</button>
             </nav>
@@ -111,6 +112,76 @@
 
                     <div class="form-actions">
                         <button type="submit" class="btn-primary">Save Campaign</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Abandoned Cart View -->
+            <section id="view-abandoned" class="view hidden">
+                <div class="section-header">
+                    <h2>Abandoned Cart Flow Manager</h2>
+                </div>
+                
+                <div class="info-card">
+                    <h4>💡 How It Works</h4>
+                    <p>Automate sending cart recovery webhooks to Reply.cx. When a checkout is updated, we start a countdown. If no order is placed within that timeframe, the customer's details are sent to Reply.cx to trigger your custom messaging flow. If they purchase, the trigger is automatically suppressed!</p>
+                </div>
+
+                <form id="abandoned-form" class="card shadow">
+                    <div class="switch-container">
+                        <div class="switch-label">
+                            <span>Enable Abandoned Cart Flow</span>
+                            <span>When enabled, checkout updates are tracked to send recovery messages.</span>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="abandoned-enabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="abandoned-reply-url">Reply.cx Webhook URL</label>
+                        <input type="url" id="abandoned-reply-url" placeholder="https://api.reply.cx/webhook/..." required>
+                        <p class="helper-text">Enter the specific webhook URL provided by Reply.cx to trigger your abandoned cart sequence.</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="abandoned-reply-token">Reply.cx API Token (Bearer)</label>
+                        <input type="password" id="abandoned-reply-token" placeholder="Your API Token (Optional)">
+                        <p class="helper-text">Optional bearer token if required by the Reply.cx webhook.</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="abandoned-delay">Recovery Delay (in minutes)</label>
+                        <input type="number" id="abandoned-delay" min="1" max="1440" value="60" required>
+                        <p class="helper-text">Wait time before triggering the abandoned cart message (default: 60 minutes).</p>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 2rem;">
+                        <label>Shopify Webhook Endpoints</label>
+                        <p class="helper-text" style="margin-bottom: 1.5rem;">Copy these webhook URLs and paste them in your Shopify settings (Settings &rarr; Notifications &rarr; Webhooks) to feed data into this flow.</p>
+                        
+                        <div class="webhook-setup-box">
+                            <h4>1. Checkout Updated Webhook</h4>
+                            <p class="helper-text" style="margin-bottom: 0.25rem;">Create a webhook for <strong>Checkout Update</strong> and paste this URL:</p>
+                            <div class="webhook-url-box" style="margin: 0.25rem 0 1rem 0;">
+                                <code id="abandoned-checkout-webhook-url">https://your-domain.com/api/webhook?event=checkouts/update</code>
+                                <button type="button" class="btn-copy" id="copy-checkout-url-btn">Copy</button>
+                            </div>
+                        </div>
+
+                        <div class="webhook-setup-box">
+                            <h4>2. Order Created Webhook (for Suppression)</h4>
+                            <p class="helper-text" style="margin-bottom: 0.25rem;">Create a webhook for <strong>Order Creation</strong> and paste this URL (if not already using the existing campaign webhook):</p>
+                            <div class="webhook-url-box" style="margin: 0.25rem 0 1rem 0;">
+                                <code id="abandoned-order-webhook-url">https://your-domain.com/api/webhook?event=orders/create</code>
+                                <button type="button" class="btn-copy" id="copy-order-url-btn">Copy</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions" style="margin-top: 2rem;">
+                        <button type="submit" class="btn-primary">Save Settings</button>
                     </div>
                 </form>
             </section>
