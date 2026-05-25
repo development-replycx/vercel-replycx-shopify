@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { processDueAbandonedCheckouts } from '../lib/abandoned-checkout-processor.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -226,6 +227,7 @@ export default async function handler(req, res) {
       }
 
       const supabase = createClient(supabaseUrl, supabaseKey);
+      await processDueAbandonedCheckouts({ supabase, limit: 10 });
 
       // Query Supabase to check if the Abandoned Cart Flow is active and get settings
       const { data: campaign, error } = await supabase
@@ -286,6 +288,7 @@ export default async function handler(req, res) {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
+  await processDueAbandonedCheckouts({ supabase, limit: 10 });
 
   try {
     // Fetch all active campaigns

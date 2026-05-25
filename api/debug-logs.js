@@ -156,6 +156,14 @@ export default async function handler(req, res) {
     }
   }
 
+  if (req.method === 'GET' && supabase && req.query.autorun !== '0') {
+    try {
+      processorResult = await processDueJobs(req);
+    } catch (error) {
+      processorResult = { status: 500, body: { error: error.message } };
+    }
+  }
+
   if (!supabase) {
     const payload = {
       source: 'memory',
