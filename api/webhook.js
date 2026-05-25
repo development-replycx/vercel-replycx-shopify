@@ -91,6 +91,7 @@ async function cacheCheckout(supabase, record) {
       orders_count: record.orders_count,
       ordered: record.ordered,
       job_id: record.job_id,
+      scheduled_at: record.scheduled_at,
       updated_at: new Date().toISOString()
     }, { onConflict: 'cart_token' });
 
@@ -252,12 +253,6 @@ export default async function handler(req, res) {
       const orders_count = getByPath(payload, 'customer.orders_count') || 0;
       const job_id = `${cart_token}:${Date.now()}`;
 
-      // Save to warm cache
-      cartStorage.set(cart_token, { phone, first_name, orders_count, ordered: false, job_id });
-      await cacheCheckout(supabase, { cart_token, phone, first_name, orders_count, ordered: false, job_id });
-      await logDebug('checkout_cached', { cart_token, phone, first_name, orders_count, job_id });
-      console.log(`[Abandoned Cart] Saved checkout to temp cache. cart_token: ${cart_token}`);
-
       // Read delay minutes
       let delayMinutes = 60;
       if (campaign.mappings) {
@@ -270,139 +265,13 @@ export default async function handler(req, res) {
         }
       }
 
-      console.log(`[Abandoned Cart] Scheduling delayed job for cart_token: ${cart_token} in ${delayMinutes} minutes.`);
+      const scheduled_at = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString();
 
-      if (cartTimers.has(cart_token)) {
-        clearTimeout(cartTimers.get(cart_token));
-        cartTimers.delete(cart_token);
-        await logDebug('duplicate_job_replaced', { cart_token, phone, delay_minutes: delayMinutes });
-      }
-
-      // Start delayed job
-      const timer = setTimeout(async () => {
-        let shouldDeleteCache = true;
-        try {
-          cartTimers.delete(cart_token);
-          await logDebug('delay_timer_fired', { cart_token });
-
-          const record = await getLatestCachedCheckout(supabase, cart_token);
-          if (!record) {
-            await logDebug('no_data_found', { cart_token });
-            console.log(`[Abandoned Cart] Delayed job fired: No record found for cart_token: ${cart_token}`);
-            return;
-          }
-
-          if (record.job_id && record.job_id !== job_id) {
-            shouldDeleteCache = false;
-            await logDebug('duplicate_job_skipped', { cart_token, phone: record.phone, current_job_id: record.job_id, stale_job_id: job_id });
-            return;
-          }
-
-          await logDebug('job_fired', { cart_token, phone: record.phone });
-
-          if (record.ordered) {
-            await logDebug('suppressed', { cart_token, reason: 'order placed' });
-            console.log(`[Abandoned Cart] Delayed job fired: Suppression active (ordered = true) for cart_token: ${cart_token}`);
-            return;
-          }
-
-          // Fetch latest campaign settings dynamically to use latest URL/token if updated
-          const { data: latestCampaign } = await supabase
-            .from('campaigns')
-            .select('*')
-            .eq('id', '11111111-1111-1111-1111-111111111111')
-            .single();
-
-          if (!latestCampaign || latestCampaign.status !== 'active' || !latestCampaign.reply_url) {
-            await logDebug('job_failed', {
-              cart_token,
-              reason: 'Campaign inactive or URL not set at runtime',
-              campaign_found: !!latestCampaign,
-              campaign_status: latestCampaign ? latestCampaign.status : null,
-              has_reply_url: !!(latestCampaign && latestCampaign.reply_url)
-            });
-            console.warn('[Abandoned Cart] Delayed job fired: Webhook URL is not configured or flow is inactive.');
-            return;
-          }
-
-          console.log(`[Abandoned Cart] Delayed job fired: Sending recovery trigger for cart_token: ${cart_token} to Reply.cx.`);
-          
-          const headers = { 'Content-Type': 'application/json' };
-          if (latestCampaign.reply_token) {
-            headers['Authorization'] = `Bearer ${latestCampaign.reply_token}`;
-          }
-
-          const replyRequestBody = {
-            phone: record.phone,
-            first_name: record.first_name,
-            cart_token,
-            orders_count: String(record.orders_count || 0)
-          };
-
-          await logDebug('replycx_post_sending', {
-            cart_token,
-            phone: record.phone,
-            first_name: record.first_name,
-            reply_url: getUrlPreview(latestCampaign.reply_url),
-            has_reply_token: !!latestCampaign.reply_token,
-            reply_token_preview: maskSecret(latestCampaign.reply_token),
-            payload_format: 'flat_json',
-            payload: replyRequestBody
-          });
-
-          let response;
-          try {
-            response = await fetch(latestCampaign.reply_url, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify(replyRequestBody)
-            });
-          } catch (err) {
-            await logDebug('replycx_trigger_failed', {
-              cart_token,
-              phone: record.phone,
-              first_name: record.first_name,
-              error: err.message,
-              reply_url: getUrlPreview(latestCampaign.reply_url),
-              has_reply_token: !!latestCampaign.reply_token,
-              reply_token_preview: maskSecret(latestCampaign.reply_token)
-            });
-            throw err;
-          }
-
-          const responseText = await response.text();
-          await logDebug('replycx_triggered', {
-            cart_token,
-            phone: record.phone,
-            first_name: record.first_name,
-            orders_count: record.orders_count,
-            payload_format: 'flat_json',
-            status_code: response.status,
-            response: responseText,
-            reply_url: getUrlPreview(latestCampaign.reply_url),
-            has_reply_token: !!latestCampaign.reply_token,
-            reply_token_preview: maskSecret(latestCampaign.reply_token)
-          });
-          console.log(`[Abandoned Cart] Reply.cx Webhook response: ${response.status} - ${responseText}`);
-
-          // Update last triggered timestamp
-          await supabase
-            .from('campaigns')
-            .update({ last_triggered: new Date().toISOString() })
-            .eq('id', '11111111-1111-1111-1111-111111111111');
-
-        } catch (err) {
-          await logDebug('job_error', { cart_token, error: err.message });
-          console.error(`[Abandoned Cart] Error executing delayed job for cart_token: ${cart_token}`, err);
-        } finally {
-          // Purge temp cache entry
-          if (shouldDeleteCache) {
-            await deleteCachedCheckout(supabase, cart_token);
-            console.log(`[Abandoned Cart] Purged checkout cache for cart_token: ${cart_token}`);
-          }
-        }
-      }, delayMinutes * 60 * 1000);
-      cartTimers.set(cart_token, timer);
+      // Save to warm cache and durable schedule
+      cartStorage.set(cart_token, { phone, first_name, orders_count, ordered: false, job_id, scheduled_at });
+      await cacheCheckout(supabase, { cart_token, phone, first_name, orders_count, ordered: false, job_id, scheduled_at });
+      await logDebug('checkout_cached', { cart_token, phone, first_name, orders_count, job_id, delay_minutes: delayMinutes, scheduled_at });
+      console.log(`[Abandoned Cart] Saved checkout to queue. cart_token: ${cart_token}, scheduled_at: ${scheduled_at}`);
 
       return res.status(200).json({ success: true, message: 'Checkout update received silently' });
     } catch (err) {
