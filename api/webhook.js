@@ -333,12 +333,10 @@ export default async function handler(req, res) {
           }
 
           const replyRequestBody = {
-            data: [[
-              record.phone,
-              record.first_name,
-              cart_token,
-              String(record.orders_count || 0)
-            ]]
+            phone: record.phone,
+            first_name: record.first_name,
+            cart_token,
+            orders_count: String(record.orders_count || 0)
           };
 
           await logDebug('replycx_post_sending', {
@@ -348,6 +346,7 @@ export default async function handler(req, res) {
             reply_url: getUrlPreview(latestCampaign.reply_url),
             has_reply_token: !!latestCampaign.reply_token,
             reply_token_preview: maskSecret(latestCampaign.reply_token),
+            payload_format: 'flat_json',
             payload: replyRequestBody
           });
 
@@ -377,6 +376,7 @@ export default async function handler(req, res) {
             phone: record.phone,
             first_name: record.first_name,
             orders_count: record.orders_count,
+            payload_format: 'flat_json',
             status_code: response.status,
             response: responseText,
             reply_url: getUrlPreview(latestCampaign.reply_url),
