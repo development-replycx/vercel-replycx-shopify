@@ -142,12 +142,12 @@ export default async function handler(req, res) {
           headers['Authorization'] = `Bearer ${latestCampaign.reply_token}`;
         }
 
-        const replyRequestBody = {
+        const replyRequestBody = [{
           phone: record.phone || '',
           first_name: record.first_name || '',
           cart_token: record.cart_token,
-          orders_count: String(record.orders_count || 0)
-        };
+          orders_count: record.orders_count || 0
+        }];
 
         await logDebug(supabase, 'replycx_post_sending', {
           cart_token: record.cart_token,
@@ -156,7 +156,7 @@ export default async function handler(req, res) {
           reply_url: getUrlPreview(latestCampaign.reply_url),
           has_reply_token: !!latestCampaign.reply_token,
           reply_token_preview: maskSecret(latestCampaign.reply_token),
-          payload_format: 'flat_json',
+          payload_format: 'array_json',
           payload: replyRequestBody
         });
 
@@ -186,7 +186,7 @@ export default async function handler(req, res) {
           phone: record.phone || '',
           first_name: record.first_name || '',
           orders_count: record.orders_count || 0,
-          payload_format: 'flat_json',
+          payload_format: 'array_json',
           status_code: response.status,
           response: responseText,
           reply_url: getUrlPreview(latestCampaign.reply_url),
