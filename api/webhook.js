@@ -180,6 +180,37 @@ function getByPath(obj, path) {
   return normalizedPath.split('.').reduce((acc, part) => acc && acc[part], obj);
 }
 
+function parseCampaignMappings(rawMappings) {
+  let parsed = rawMappings || [];
+  if (typeof parsed === 'string') {
+    try { parsed = JSON.parse(parsed); } catch (e) { parsed = []; }
+  }
+
+  if (Array.isArray(parsed)) {
+    return {
+      fields: parsed,
+      phoneCountryCode: { enabled: false, countryCode: '91' }
+    };
+  }
+
+  const phoneConfig = parsed.phone_country_code || parsed.phoneCountryCode || {};
+  return {
+    fields: Array.isArray(parsed.fields) ? parsed.fields : [],
+    phoneCountryCode: {
+      enabled: !!phoneConfig.enabled,
+      countryCode: phoneConfig.country_code || phoneConfig.countryCode || '91'
+    }
+  };
+}
+
+function addCountryCodeToPhone(value, countryCode) {
+  if (!value) return value;
+  const code = (countryCode || '91').toString().replace(/\D/g, '') || '91';
+  const phone = value.toString().trim().replace(/^\+/, '').replace(/^0+/, '').replace(/\D/g, '');
+  if (!phone) return value;
+  return phone.startsWith(code) ? phone : `${code}${phone}`;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -317,20 +348,26 @@ export default async function handler(req, res) {
 
     for (const campaign of activeCampaigns) {
       const mappedData = {};
+      const mappingConfig = parseCampaignMappings(campaign.mappings);
       
-      if (campaign.mappings && Array.isArray(campaign.mappings)) {
-        campaign.mappings.forEach(mapping => {
+      if (mappingConfig.fields.length > 0) {
+        mappingConfig.fields.forEach(mapping => {
           let value = getByPath(payload, mapping.path);
+          const replyVariableName = (mapping.name || '').trim();
           
-          // Hardcoded rule: Phone gets +91 prefix
-          if (mapping.name === 'phone' && value) {
-            const digits = value.toString().replace(/\D/g, '');
-            if (digits.length === 12 && digits.startsWith('91')) {
-              value = `+${digits}`;
-            } else if (digits.length === 10) {
-              value = `+91${digits}`;
+          if (replyVariableName === 'phone' && value) {
+            if (mappingConfig.phoneCountryCode.enabled) {
+              value = addCountryCodeToPhone(value, mappingConfig.phoneCountryCode.countryCode);
             } else {
-              value = `+91${digits}`;
+              // Existing behavior for old campaigns: phone gets +91 prefix.
+              const digits = value.toString().replace(/\D/g, '');
+              if (digits.length === 12 && digits.startsWith('91')) {
+                value = `+${digits}`;
+              } else if (digits.length === 10) {
+                value = `+91${digits}`;
+              } else {
+                value = `+91${digits}`;
+              }
             }
           }
 
