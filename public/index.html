@@ -89,6 +89,23 @@
                         <input type="password" id="replyToken" placeholder="Your API Token" required>
                     </div>
 
+                    <div class="phone-country-setting">
+                        <div class="switch-container compact-switch">
+                            <div class="switch-label">
+                                <span>Add Country Code to Phone</span>
+                                <span>Applies only to the mapping where Reply.cx variable is phone.</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="phone-country-enabled">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div id="phone-country-code-group" class="country-code-group hidden">
+                            <label for="phone-country-code">Country Code</label>
+                            <input type="text" id="phone-country-code" value="91" inputmode="numeric" placeholder="91">
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>Variable Mappings</label>
                         <p class="helper-text">Map Shopify field paths to Reply.cx variable names.</p>

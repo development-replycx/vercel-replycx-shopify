@@ -518,6 +518,46 @@ input:checked + .slider:before {
     transform: translateX(26px);
 }
 
+.phone-country-setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    background: var(--bg);
+}
+
+.compact-switch {
+    padding: 0;
+    border-bottom: 0;
+    margin-bottom: 0;
+    gap: 1rem;
+}
+
+.country-code-group {
+    width: 180px;
+    margin-top: 0;
+    flex-shrink: 0;
+}
+
+.country-code-group input {
+    background: white;
+}
+
+@media (max-width: 640px) {
+    .phone-country-setting {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .country-code-group {
+        width: 100%;
+    }
+}
+
 /* Info Box / Instructions */
 .info-card {
     background: #EFF6FF;
@@ -560,4 +600,3 @@ input:checked + .slider:before {
 .webhook-setup-box .helper-text {
     margin-bottom: 0.5rem;
 }
-

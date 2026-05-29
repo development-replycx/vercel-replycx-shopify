@@ -69,6 +69,7 @@ function setupEventListeners() {
     document.getElementById('campaign-form').addEventListener('submit', handleFormSubmit);
     document.getElementById('abandoned-form').addEventListener('submit', handleAbandonedSubmit);
     document.getElementById('add-mapping').addEventListener('click', addMappingRow);
+    document.getElementById('phone-country-enabled').addEventListener('change', updatePhoneCountryVisibility);
     document.getElementById('mapping-container').addEventListener('click', (e) => {
         if (e.target.classList.contains('remove-row')) {
             e.target.parentElement.remove();
@@ -80,6 +81,34 @@ function setupEventListeners() {
         copyUrlBtn.addEventListener('click', copyWebhookUrl);
     }
     document.getElementById('test-campaign-btn').addEventListener('click', runTest);
+}
+
+function parseCampaignMappings(rawMappings) {
+    let parsed = rawMappings || [];
+    if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch (e) { parsed = []; }
+    }
+
+    if (Array.isArray(parsed)) {
+        return {
+            fields: parsed,
+            phoneCountryCode: { enabled: false, countryCode: '91' }
+        };
+    }
+
+    const phoneConfig = parsed.phone_country_code || parsed.phoneCountryCode || {};
+    return {
+        fields: Array.isArray(parsed.fields) ? parsed.fields : [],
+        phoneCountryCode: {
+            enabled: !!phoneConfig.enabled,
+            countryCode: phoneConfig.country_code || phoneConfig.countryCode || '91'
+        }
+    };
+}
+
+function updatePhoneCountryVisibility() {
+    const enabled = document.getElementById('phone-country-enabled').checked;
+    document.getElementById('phone-country-code-group').classList.toggle('hidden', !enabled);
 }
 
 // Navigation
@@ -136,7 +165,22 @@ async function handleFormSubmit(e) {
         if (path && varName) mappings.push({ path, name: varName });
     });
 
-    const payload = { id, name, event_type, reply_url, reply_token, mappings };
+    const addCountryCode = document.getElementById('phone-country-enabled').checked;
+    const countryCode = (document.getElementById('phone-country-code').value || '91').replace(/\D/g, '') || '91';
+    const payload = {
+        id,
+        name,
+        event_type,
+        reply_url,
+        reply_token,
+        mappings: {
+            fields: mappings,
+            phone_country_code: {
+                enabled: addCountryCode,
+                country_code: countryCode
+            }
+        }
+    };
 
     try {
         const res = await fetch(API_URL, {
@@ -232,9 +276,13 @@ function editCampaign(id) {
     document.getElementById('eventType').value = campaign.event_type;
     document.getElementById('replyUrl').value = campaign.reply_url;
     document.getElementById('replyToken').value = campaign.reply_token;
+    const mappingConfig = parseCampaignMappings(campaign.mappings);
+    document.getElementById('phone-country-enabled').checked = mappingConfig.phoneCountryCode.enabled;
+    document.getElementById('phone-country-code').value = mappingConfig.phoneCountryCode.countryCode || '91';
+    updatePhoneCountryVisibility();
     const container = document.getElementById('mapping-container');
     container.innerHTML = '';
-    campaign.mappings.forEach(m => addMappingRow(null, m.path, m.name));
+    mappingConfig.fields.forEach(m => addMappingRow(null, m.path, m.name));
     document.getElementById('form-title').textContent = 'Edit Campaign';
     showView('add');
 }
@@ -242,6 +290,9 @@ function editCampaign(id) {
 function resetForm() {
     document.getElementById('campaign-form').reset();
     document.getElementById('campaign-id').value = '';
+    document.getElementById('phone-country-enabled').checked = false;
+    document.getElementById('phone-country-code').value = '91';
+    updatePhoneCountryVisibility();
     const container = document.getElementById('mapping-container');
     container.innerHTML = `
         <div class="mapping-row">
