@@ -75,6 +75,13 @@ function setupEventListeners() {
             e.target.parentElement.remove();
         }
     });
+    
+    document.getElementById('bot-add-mapping').addEventListener('click', () => addBotMappingRow());
+    document.getElementById('bot-mapping-container').addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-row')) {
+            e.target.parentElement.remove();
+        }
+    });
 
     const copyUrlBtn = document.getElementById('copy-url-btn');
     if (copyUrlBtn) {
@@ -323,6 +330,19 @@ function addMappingRow(e, path = '', name = '') {
     container.appendChild(row);
 }
 
+function addBotMappingRow(path = '', name = '') {
+    const container = document.getElementById('bot-mapping-container');
+    const row = document.createElement('div');
+    row.className = 'mapping-row';
+    row.innerHTML = `
+        <input type="text" value="${path}" class="map-path" required>
+        <span class="arrow">→</span>
+        <input type="text" value="${name}" class="map-name" required>
+        <button type="button" class="btn-icon remove-row">×</button>
+    `;
+    container.appendChild(row);
+}
+
 function copyWebhookUrl() {
     const url = document.getElementById('generated-url').textContent;
     navigator.clipboard.writeText(url).then(() => showToast('Copied!'));
@@ -376,6 +396,7 @@ async function loadAbandonedCartSettings() {
                 document.getElementById('abandoned-reply-token').value = setting.reply_token || '';
                 
                 let delay = 60;
+                let botTrigger = { url: '', token: '', mappings: [] };
                 if (setting.mappings) {
                     let parsedMappings = setting.mappings;
                     if (typeof setting.mappings === 'string') {
@@ -384,13 +405,27 @@ async function loadAbandonedCartSettings() {
                     if (parsedMappings && parsedMappings.delay_minutes !== undefined) {
                         delay = parsedMappings.delay_minutes;
                     }
+                    if (parsedMappings && parsedMappings.bot_trigger) {
+                        botTrigger = parsedMappings.bot_trigger;
+                    }
                 }
                 document.getElementById('abandoned-delay').value = delay;
+                
+                document.getElementById('bot-trigger-url').value = botTrigger.url || '';
+                document.getElementById('bot-trigger-token').value = botTrigger.token || '';
+                const botContainer = document.getElementById('bot-mapping-container');
+                botContainer.innerHTML = '';
+                if (botTrigger.mappings && botTrigger.mappings.length > 0) {
+                    botTrigger.mappings.forEach(m => addBotMappingRow(m.path, m.name));
+                }
             } else {
                 document.getElementById('abandoned-enabled').checked = false;
                 document.getElementById('abandoned-reply-url').value = '';
                 document.getElementById('abandoned-reply-token').value = '';
                 document.getElementById('abandoned-delay').value = 60;
+                document.getElementById('bot-trigger-url').value = '';
+                document.getElementById('bot-trigger-token').value = '';
+                document.getElementById('bot-mapping-container').innerHTML = '';
             }
         }
     } catch (err) {
@@ -406,6 +441,15 @@ async function handleAbandonedSubmit(e) {
     const reply_token = document.getElementById('abandoned-reply-token').value;
     const delay_minutes = parseInt(document.getElementById('abandoned-delay').value, 10) || 60;
 
+    const bot_url = document.getElementById('bot-trigger-url').value;
+    const bot_token = document.getElementById('bot-trigger-token').value;
+    const bot_mappings = [];
+    document.querySelectorAll('#bot-mapping-container .mapping-row').forEach(row => {
+        const path = row.querySelector('.map-path').value;
+        const name = row.querySelector('.map-name').value;
+        if (path && name) bot_mappings.push({ path, name });
+    });
+
     const payload = {
         id: '11111111-1111-1111-1111-111111111111',
         name: 'Abandoned Cart Flow',
@@ -413,7 +457,14 @@ async function handleAbandonedSubmit(e) {
         reply_url,
         reply_token,
         status: enabled ? 'active' : 'inactive',
-        mappings: { delay_minutes }
+        mappings: { 
+            delay_minutes,
+            bot_trigger: {
+                url: bot_url,
+                token: bot_token,
+                mappings: bot_mappings
+            }
+        }
     };
 
     try {

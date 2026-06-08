@@ -197,6 +197,32 @@
                         </div>
                     </div>
 
+                    <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--border-color);">
+                    
+                    <div class="section-header" style="margin-bottom: 1rem;">
+                        <h3 style="font-size: 1.1rem;">Bot Trigger Push</h3>
+                        <p class="helper-text">Optional: Send a separate webhook containing customized fields when the abandoned cart fires.</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="bot-trigger-url">Reply.cx Webhook URL</label>
+                        <input type="url" id="bot-trigger-url" placeholder="https://app.reply.cx/webhook/...">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="bot-trigger-token">Access Token (Bearer)</label>
+                        <input type="password" id="bot-trigger-token" placeholder="Your API Token">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Field Mappings</label>
+                        <p class="helper-text">Map Shopify field paths (e.g. <code>shipping_address.phone</code>) to Reply.cx variable names.</p>
+                        <div id="bot-mapping-container">
+                            <!-- Bot Trigger Mapping rows -->
+                        </div>
+                        <button type="button" id="bot-add-mapping" class="btn-secondary" style="margin-top: 0.5rem;">+ Add Field</button>
+                    </div>
+
                     <div class="form-actions" style="margin-top: 2rem;">
                         <button type="submit" class="btn-primary">Save Settings</button>
                     </div>
