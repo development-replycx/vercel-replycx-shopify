@@ -93,6 +93,7 @@ async function cacheCheckout(supabase, record) {
       ordered: record.ordered,
       job_id: record.job_id,
       scheduled_at: record.scheduled_at,
+      raw_payload: record.raw_payload,
       updated_at: new Date().toISOString()
     }, { onConflict: 'cart_token' });
 
@@ -302,7 +303,7 @@ export default async function handler(req, res) {
 
       // Save to warm cache and durable schedule
       cartStorage.set(cart_token, { phone, first_name, orders_count, ordered: false, job_id, scheduled_at });
-      await cacheCheckout(supabase, { cart_token, phone, first_name, orders_count, ordered: false, job_id, scheduled_at });
+      await cacheCheckout(supabase, { cart_token, phone, first_name, orders_count, ordered: false, job_id, scheduled_at, raw_payload: payload });
       await logDebug('checkout_cached', { cart_token, phone, first_name, orders_count, job_id, delay_minutes: delayMinutes, scheduled_at });
       console.log(`[Abandoned Cart] Saved checkout to queue. cart_token: ${cart_token}, scheduled_at: ${scheduled_at}`);
 
