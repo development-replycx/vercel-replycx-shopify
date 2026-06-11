@@ -175,10 +175,26 @@ function formatPhoneNumber(value) {
 // Helper to get nested object values by path (e.g. "shipping_address.phone")
 // Supports dot notation and array indices like "fulfillments[0].tracking_number" or "fulfillments.0.tracking_number"
 function getByPath(obj, path) {
-  if (!path) return null;
+  if (!path || !obj) return null;
   // Normalize array bracket notation (e.g., fulfillments[0] -> fulfillments.0)
   const normalizedPath = path.replace(/\[(\d+)\]/g, '.$1');
-  return normalizedPath.split('.').reduce((acc, part) => acc && acc[part], obj);
+  const parts = normalizedPath.split('.');
+  
+  let current = obj;
+  for (let i = 0; i < parts.length; i++) {
+    if (current === null || current === undefined) return null;
+    const part = parts[i];
+    
+    if (Array.isArray(current) && isNaN(Number(part))) {
+      const extracted = current.map(item => item && item[part]).filter(v => v !== undefined && v !== null);
+      if (extracted.length === 0) return null;
+      if (i === parts.length - 1) return extracted.join(', ');
+      current = extracted[0];
+    } else {
+      current = current[part];
+    }
+  }
+  return current;
 }
 
 function parseCampaignMappings(rawMappings) {
