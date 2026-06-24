@@ -148,6 +148,8 @@ export default async function handler(req, res) {
         if (wantsJson(req)) {
           return res.status(200).json(processorResult);
         }
+        res.setHeader('Location', '/api/debug-logs');
+        return res.status(303).end();
       } else {
         const result = await clearLogs(supabase);
         if (wantsJson(req) || req.method === 'DELETE') {
