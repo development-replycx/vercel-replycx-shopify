@@ -323,6 +323,19 @@ export default async function handler(req, res) {
       await logDebug('checkout_cached', { cart_token, phone, first_name, orders_count, job_id, delay_minutes: delayMinutes, scheduled_at });
       console.log(`[Abandoned Cart] Saved checkout to queue. cart_token: ${cart_token}, scheduled_at: ${scheduled_at}`);
 
+      if (cartTimers.has(cart_token)) {
+        clearTimeout(cartTimers.get(cart_token));
+      }
+      const timer = setTimeout(async () => {
+        try {
+          const bgSupabase = createClient(supabaseUrl, supabaseKey);
+          await processDueAbandonedCheckouts({ supabase: bgSupabase, limit: 10 });
+        } catch (e) {
+          console.error('[Abandoned Cart] Background timer error:', e);
+        }
+      }, delayMinutes * 60 * 1000);
+      cartTimers.set(cart_token, timer);
+
       return res.status(200).json({ success: true, message: 'Checkout update received silently' });
     } catch (err) {
       await logDebug('checkout_error', { error: err.message });
