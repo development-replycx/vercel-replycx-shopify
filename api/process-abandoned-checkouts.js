@@ -11,7 +11,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const result = await processDueAbandonedCheckouts({ supabase });
+    const forceAll = req.query.forceAll === 'true' || req.body?.forceAll === true;
+    const result = await processDueAbandonedCheckouts({ supabase, forceAll });
     return res.status(200).json(result);
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Internal Server Error' });

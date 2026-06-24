@@ -73,6 +73,10 @@ function renderHtml({ source, logs, warning, error, processorResult }) {
           <input type="hidden" name="action" value="process_due">
           <button type="submit">Run due jobs now</button>
         </form>
+        <form method="post" onsubmit="return confirm('Run ALL pending jobs, ignoring their scheduled delays?');">
+          <input type="hidden" name="action" value="process_all">
+          <button type="submit" style="background: #eab308; color: black;">Force run ALL</button>
+        </form>
         <form method="post" onsubmit="return confirm('Clear all webhook debug logs?');">
           <input type="hidden" name="action" value="clear_logs">
           <button type="submit">Clear logs</button>
@@ -104,12 +108,13 @@ async function clearLogs(supabase) {
   return { source: 'supabase', deleted: true };
 }
 
-async function processDueJobs(req) {
+async function processDueJobs(req, forceAll = false) {
   const host = req.headers.host;
   const proto = req.headers['x-forwarded-proto'] || 'https';
   const response = await fetch(`${proto}://${host}/api/process-abandoned-checkouts`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ forceAll })
   });
   const text = await response.text();
 
@@ -138,8 +143,8 @@ export default async function handler(req, res) {
     try {
       const action = req.body?.action || req.query.action || 'clear_logs';
 
-      if (action === 'process_due') {
-        processorResult = await processDueJobs(req);
+      if (action === 'process_due' || action === 'process_all') {
+        processorResult = await processDueJobs(req, action === 'process_all');
         if (wantsJson(req)) {
           return res.status(200).json(processorResult);
         }
